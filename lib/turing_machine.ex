@@ -1,24 +1,59 @@
 defmodule TuringMachine do
-  @valid_movements ["L", "R", "S"]
+  def run(tape, states) do
+    run(tape, 0, states, "A")
+  end
 
-  def run(tape, _index, _states, "0"), do: tape
+  def run(tape, _index, _states, "0"), do: Enum.join(tape)
+
+  def run(tape, index, states, state) when is_binary(tape) do
+    tape
+    |> to_list()
+    |> run(index, states, state)
+  end
 
   def run(tape, index, states, state) do
-    head = Enum.at(tape, index)
-    instruction = states[state][head]
+    if state_exists?(states, state) do
+      extended_tape = extend_tape(tape, index)
 
-    if instruction do
-      new_tape = List.update_at(tape, index, fn _ -> write(instruction) end)
+      head = Enum.at(extended_tape, index)
+      current_state = states[state]
 
-      new_movement =
+      instruction = current_state[head]
+
+      new_tape = List.update_at(extended_tape, index, fn _ -> write(instruction) end)
+
+      new_index =
         instruction
         |> move()
         |> Kernel.+(index)
 
-      run(new_tape, new_movement, states, state(instruction))
+      run(new_tape, new_index, states, state(instruction))
     else
       {:error, "State not found"}
     end
+  end
+
+  def state_exists?(states, state) do
+    Map.has_key?(states, state)
+  end
+
+  def extend_tape(tape, index) do
+    tape_length = Enum.count(tape) - 1
+
+    cond do
+      index > tape_length ->
+        tape ++ ["_"]
+
+      index < 0 ->
+        ["_"] ++ tape
+
+      true ->
+        tape
+    end
+  end
+
+  def to_list(string) do
+    String.split(string, "", trim: true)
   end
 
   def write([value, _movement, _state]), do: value
@@ -33,21 +68,17 @@ defmodule TuringMachine do
 
   def state([_value, _movement, state]), do: state
 
-  def build_state(name, string) do
+  def build_state(preview_state, name, string) when is_map(preview_state) do
     case build_instruction(string) do
-      {:ok, i} -> %{name => i}
+      {:ok, i} -> merge_states(preview_state, %{name => i})
       {:error, error} -> {:error, error}
     end
-  end
-
-  def merge_states(states, new_state) do
-    Map.merge(states, new_state)
   end
 
   def build_instruction(string) do
     instructions =
       string
-      |> String.split("-")
+      |> String.split(" ")
       |> Enum.map(&String.split(&1, "", trim: true))
 
     if is_all_valid?(instructions) do
@@ -57,18 +88,21 @@ defmodule TuringMachine do
     end
   end
 
+  # key, write, move, state
   def reduce_fun([key, w, m, s], acc) do
     Map.put(acc, key, [w, m, s])
   end
 
+  # left, rigth, stay
+  @valid_movements ["L", "R", "S"]
+
   def is_all_valid?(instructions) do
     Enum.all?(instructions, fn [_key, _w, m, _s] ->
-      is_valid_movement?(m)
+      m in @valid_movements
     end)
   end
 
-  # left, right, stay
-  def is_valid_movement?(m) when m in @valid_movements, do: true
-
-  def is_valid_movement?(_), do: false
+  def merge_states(state_a, state_b) do
+    Map.merge(state_a, state_b)
+  end
 end
